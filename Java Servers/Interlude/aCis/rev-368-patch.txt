@@ -1,0 +1,157 @@
+diff --git java/net/sf/l2j/DonateData.java java/net/sf/l2j/DonateData.java
+new file mode 100644
+index 0000000..2cab72c
+--- /dev/null
++++ java/net/sf/l2j/DonateData.java
+@@ -0,0 +1,128 @@
++package net.sf.l2j;
++
++import java.sql.Connection;
++import java.sql.PreparedStatement;
++import java.sql.ResultSet;
++import java.sql.SQLException;
++import java.util.Map;
++import java.util.Map.Entry;
++import java.util.Objects;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
++import net.sf.l2j.commons.concurrent.ThreadPool;
++
++import net.sf.l2j.gameserver.model.World;
++import net.sf.l2j.gameserver.model.actor.instance.Player;
++
++/**
++ * @author Kara`
++ */
++public class DonateData implements Runnable
++{
++	private static final Logger _log = Logger.getLogger(DonateData.class.getName());
++	private static final String SELECT_QUERY = "SELECT no, id, count, playername FROM donate_holder WHERE order_status=1";
++	private static final String SELECT_OBJECT_ID = "SELECT obj_Id FROM characters WHERE char_name=?";
++	private static final String DELETE_QUERY = "DELETE FROM donate_holder WHERE no=? LIMIT 1";
++	private final Map<Integer, String> _chars = new ConcurrentHashMap<>();
++	
++	public DonateData()
++	{
++		ThreadPool.scheduleAtFixedRate(() -> DonateData.getInstance(), 5000, 5000);
++		_log.log(Level.INFO, "Task has started.");
++	}
++	
++	@Override
++	public void run()
++	{
++		try (Connection con = L2DatabaseFactory.getInstance().getConnection(); PreparedStatement st = con.prepareStatement(SELECT_QUERY))
++		{
++			try (final ResultSet rs = st.executeQuery())
++			{
++				while (rs.next())
++				{
++					final int numberId = rs.getInt(1);
++					
++					final Player activeChar = World.getInstance().getPlayer(getObjectIdByName(rs.getString(4)));
++					
++					if (activeChar == null || !activeChar.isOnline())
++					{
++						continue;
++					}
++					
++					activeChar.addItem("Reward", rs.getInt(2), rs.getInt(3), activeChar, true);
++					
++					try (PreparedStatement st2 = con.prepareStatement(DELETE_QUERY))
++					{
++						st2.setInt(1, numberId);
++						st2.execute();
++					}
++					catch (Exception e)
++					{
++						_log.log(Level.SEVERE, "Could not delete no: " + numberId);
++					}
++				}
++			}
++		}
++		catch (Exception e)
++		{
++			_log.log(Level.SEVERE, "Could not send reward.", e);
++		}
++	}
++	
++	/**
++	 * @param name
++	 * @return cached objectId if exists else pull it and store it from database
++	 */
++	private int getObjectIdByName(final String name)
++	{
++		if (name == null || name.isEmpty())
++		{
++			return 0;
++		}
++		
++		final Entry<Integer, String> entry = _chars.entrySet().stream().filter(Objects::nonNull).filter(s -> s.getValue().equals(name)).findFirst().orElseGet(null);
++		
++		if (entry != null)
++		{
++			return entry.getKey();
++		}
++		
++		int objectId = 0;
++		
++		try (Connection con = L2DatabaseFactory.getInstance().getConnection(); PreparedStatement ps = con.prepareStatement(SELECT_OBJECT_ID))
++		{
++			ps.setString(1, name);
++			
++			try (final ResultSet rs = ps.executeQuery())
++			{
++				if (rs.next())
++				{
++					objectId = rs.getInt(1);
++				}
++			}
++		}
++		catch (SQLException e)
++		{
++			_log.log(Level.WARNING, getClass().getSimpleName() + ": Could not retrieve objectId from name: " + name, e);
++		}
++		
++		if (objectId > 0)
++		{
++			_chars.put(objectId, name);
++		}
++		
++		return objectId;
++	}
++	
++	public static DonateData getInstance()
++	{
++		return SingletonHolder._instance;
++	}
++	
++	private static class SingletonHolder
++	{
++		protected static final DonateData _instance = new DonateData();
++	}
++}
+\ No newline at end of file
+
+
+diff --git java/net/sf/l2j/gameserver/GameServer.java java/net/sf/l2j/gameserver/GameServer.java
+index 8c09b00..3cb46b7 100644
+--- java/net/sf/l2j/gameserver/GameServer.java
++++ java/net/sf/l2j/gameserver/GameServer.java
+@@ -17,6 +17,7 @@
+ import net.sf.l2j.commons.util.SysUtil;
+ 
+ import net.sf.l2j.Config;
++import net.sf.l2j.DonateData;
+ import net.sf.l2j.L2DatabaseFactory;
+ import net.sf.l2j.gameserver.cache.CrestCache;
+ import net.sf.l2j.gameserver.cache.HtmCache;
+@@ -198,6 +189,7 @@
+ 		MapRegionTable.getInstance();
+ 		AnnouncementTable.getInstance();
+ 		ServerMemo.getInstance();
++		DonateData.getInstance();
+ 		
+ 		StringUtil.printSection("Skills");
+ 		SkillTable.getInstance();
