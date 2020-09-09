@@ -1,0 +1,13 @@
+depends on your project in DonateGiverTaskManager.java
+
+before the for loop example: "for (Player activeChar : World.getPlayer(obj_id))" 
+
+adapt (again depends on your project) add before the for loop this:
+Player Player = World.getPlayer(obj_id);
+if (Player != null && Player.isOnline() == true)
+
+so it will become like this
+Player Player = World.getPlayer(obj_id);
+if (Player != null && Player.isOnline() == true)
+   for (Player activeChar : World.getPlayer(obj_id))
+   // rest of code
