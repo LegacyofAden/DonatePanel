@@ -107,7 +107,7 @@ public class DonateManager
 	{
 		public DonationSuccessMail(Player player,int id,int count)
 		{
-			super(player, count, count);
+			super(player, id, count);
 		}
 
 		@Override
